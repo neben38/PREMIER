@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PREMIER — Piano</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --white: #f5f3ee;
+      --black: #1a1a1a;
+      --accent: #c8a96e;
+      --bg: #111;
+      --pressed-white: #e0d8c8;
+      --pressed-black: #3a3a3a;
+    }
+
+    body {
+      background: var(--bg);
+      color: #fff;
+      font-family: 'Inter', 'Helvetica Neue', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 32px;
+      user-select: none;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    header p {
+      font-size: 0.72rem;
+      color: #666;
+      margin-top: 4px;
+      letter-spacing: 0.15em;
+    }
+
+    /* ── Keyboard ─────────────────────────────────── */
+
+    .keyboard-wrap {
+      position: relative;
+      touch-action: none;
+    }
+
+    .keyboard {
+      display: flex;
+      position: relative;
+      height: 220px;
+    }
+
+    .key {
+      position: relative;
+      border-radius: 0 0 6px 6px;
+      cursor: pointer;
+      transition: background 60ms;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 10px;
+      font-size: 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .key.white {
+      width: 52px;
+      height: 220px;
+      background: var(--white);
+      border: 1px solid #bbb;
+      color: #999;
+      z-index: 1;
+      margin-right: 2px;
+    }
+
+    .key.white:last-child { margin-right: 0; }
+
+    .key.white.pressed {
+      background: var(--pressed-white);
+      box-shadow: inset 0 -4px 0 #c8b48a;
+    }
+
+    .key.black {
+      width: 34px;
+      height: 138px;
+      background: var(--black);
+      color: #555;
+      z-index: 2;
+      position: absolute;
+      top: 0;
+      border-radius: 0 0 4px 4px;
+      border: 1px solid #000;
+      box-shadow: 0 6px 0 #000, inset 0 -2px 4px rgba(255,255,255,0.08);
+    }
+
+    .key.black.pressed {
+      background: var(--pressed-black);
+      box-shadow: 0 3px 0 #000, inset 0 -1px 3px rgba(255,255,255,0.08);
+      transform: translateY(2px);
+    }
+
+    /* ── Octave label ─────────────────────────────── */
+
+    .octave-label {
+      position: absolute;
+      bottom: 10px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.55rem;
+      color: #bbb;
+      pointer-events: none;
+    }
+
+    /* ── Controls ─────────────────────────────────── */
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    label {
+      font-size: 0.72rem;
+      color: #888;
+      letter-spacing: 0.1em;
+    }
+
+    select, input[type=range] {
+      background: #222;
+      color: #fff;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    select:focus, input[type=range]:focus { border-color: var(--accent); }
+
+    .hint {
+      font-size: 0.65rem;
+      color: #444;
+      text-align: center;
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Ripple ───────────────────────────────────── */
+
+    @keyframes ripple {
+      from { opacity: .35; transform: scale(1); }
+      to   { opacity: 0;   transform: scale(2.2); }
+    }
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      width: 48px; height: 48px;
+      top: 50%; left: 50%;
+      margin: -24px 0 0 -24px;
+      background: var(--accent);
+      animation: ripple 0.45s ease-out forwards;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>PREMIER</h1>
+  <p>Piano Studio</p>
+</header>
+
+<div class="keyboard-wrap">
+  <div class="keyboard" id="keyboard"></div>
+</div>
+
+<div class="controls">
+  <label>
+    Timbre&nbsp;
+    <select id="waveform">
+      <option value="sine">Sine</option>
+      <option value="triangle" selected>Triangle</option>
+      <option value="sawtooth">Sawtooth</option>
+      <option value="square">Square</option>
+    </select>
+  </label>
+  <label>
+    Volume&nbsp;
+    <input type="range" id="volume" min="0" max="100" value="70" />
+  </label>
+  <label>
+    Octave&nbsp;
+    <select id="octave">
+      <option value="3">3</option>
+      <option value="4" selected>4</option>
+      <option value="5">5</option>
+    </select>
+  </label>
+</div>
+
+<p class="hint">cliquez · touchez · clavier&nbsp;&nbsp;(A S D F G H J — W E &nbsp;T Y U)</p>
+
+<script>
+// ── Audio context ──────────────────────────────────────────────────────────
+let ctx = null;
+function getCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+// ── Note frequencies ───────────────────────────────────────────────────────
+function midiToFreq(midi) {
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+// C D E F G A B  — notes per octave starting at C
+const WHITES = [
+  { note: 'C',  semi: 0  },
+  { note: 'D',  semi: 2  },
+  { note: 'E',  semi: 4  },
+  { note: 'F',  semi: 5  },
+  { note: 'G',  semi: 7  },
+  { note: 'A',  semi: 9  },
+  { note: 'B',  semi: 11 },
+];
+// black keys: positions relative to white index (after which white key, offset px)
+const BLACKS = [
+  { after: 0, semi: 1,  label: 'C#' },
+  { after: 1, semi: 3,  label: 'D#' },
+  { after: 3, semi: 6,  label: 'F#' },
+  { after: 4, semi: 8,  label: 'G#' },
+  { after: 5, semi: 10, label: 'A#' },
+];
+
+// Keyboard mapping (2 octave span)
+const KEY_MAP = {
+  'a': 0,  's': 2,  'd': 4,  'f': 5,
+  'g': 7,  'h': 9,  'j': 11,
+  'w': 1,  'e': 3,  't': 6,  'y': 8, 'u': 10,
+};
+
+// Active oscillators
+const active = {};
+
+function playNote(midi) {
+  if (active[midi]) return;
+  const ac = getCtx();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  const vol = document.getElementById('volume').value / 100;
+  const wave = document.getElementById('waveform').value;
+
+  osc.type = wave;
+  osc.frequency.setValueAtTime(midiToFreq(midi), ac.currentTime);
+  gain.gain.setValueAtTime(0, ac.currentTime);
+  gain.gain.linearRampToValueAtTime(vol * 0.6, ac.currentTime + 0.01);
+
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start();
+  active[midi] = { osc, gain };
+}
+
+function stopNote(midi) {
+  const n = active[midi];
+  if (!n) return;
+  const ac = getCtx();
+  n.gain.gain.setValueAtTime(n.gain.gain.value, ac.currentTime);
+  n.gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.35);
+  n.osc.stop(ac.currentTime + 0.36);
+  delete active[midi];
+}
+
+// ── Build keyboard ─────────────────────────────────────────────────────────
+const WHITE_W = 52;
+const WHITE_GAP = 2;
+const BLACK_W = 34;
+
+function buildKeyboard() {
+  const kb = document.getElementById('keyboard');
+  kb.innerHTML = '';
+  const octave = parseInt(document.getElementById('octave').value);
+  const baseMidi = (octave + 1) * 12; // C of selected octave
+
+  // White keys
+  WHITES.forEach((w, idx) => {
+    const midi = baseMidi + w.semi;
+    const el = document.createElement('div');
+    el.className = 'key white';
+    el.dataset.midi = midi;
+    el.textContent = w.note;
+    kb.appendChild(el);
+  });
+
+  // Black keys — positioned absolutely
+  const totalWhiteW = WHITE_W + WHITE_GAP;
+  BLACKS.forEach(b => {
+    const midi = baseMidi + b.semi;
+    const el = document.createElement('div');
+    el.className = 'key black';
+    el.dataset.midi = midi;
+    el.textContent = b.label;
+    // center between two white keys
+    const leftPx = (b.after + 1) * totalWhiteW - Math.floor(BLACK_W / 2) - 1;
+    el.style.left = leftPx + 'px';
+    kb.appendChild(el);
+  });
+
+  attachEvents();
+}
+
+// ── Events ─────────────────────────────────────────────────────────────────
+function pressEl(el) {
+  if (!el) return;
+  el.classList.add('pressed');
+  playNote(parseInt(el.dataset.midi));
+  spawnRipple(el);
+}
+function releaseEl(el) {
+  if (!el) return;
+  el.classList.remove('pressed');
+  stopNote(parseInt(el.dataset.midi));
+}
+
+function spawnRipple(el) {
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  el.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+}
+
+function attachEvents() {
+  const keys = document.querySelectorAll('.key');
+  keys.forEach(k => {
+    k.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      pressEl(k);
+      k.setPointerCapture(e.pointerId);
+    });
+    k.addEventListener('pointerup',   e => { e.preventDefault(); releaseEl(k); });
+    k.addEventListener('pointerleave',e => { if (k.classList.contains('pressed')) releaseEl(k); });
+  });
+}
+
+// Keyboard
+const heldKeys = new Set();
+document.addEventListener('keydown', e => {
+  if (e.repeat || heldKeys.has(e.key.toLowerCase())) return;
+  heldKeys.add(e.key.toLowerCase());
+  const semi = KEY_MAP[e.key.toLowerCase()];
+  if (semi === undefined) return;
+  const octave = parseInt(document.getElementById('octave').value);
+  const midi = (octave + 1) * 12 + semi;
+  const el = document.querySelector(`.key[data-midi="${midi}"]`);
+  pressEl(el);
+});
+document.addEventListener('keyup', e => {
+  heldKeys.delete(e.key.toLowerCase());
+  const semi = KEY_MAP[e.key.toLowerCase()];
+  if (semi === undefined) return;
+  const octave = parseInt(document.getElementById('octave').value);
+  const midi = (octave + 1) * 12 + semi;
+  const el = document.querySelector(`.key[data-midi="${midi}"]`);
+  releaseEl(el);
+});
+
+// Rebuild on octave change
+document.getElementById('octave').addEventListener('change', buildKeyboard);
+
+buildKeyboard();
+</script>
+</body>
+</html>
